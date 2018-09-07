@@ -7,7 +7,7 @@ MainWindow::MainWindow(QWidget *parent) :
 {
     ui->setupUi(this);
     this->db_ = QSqlDatabase::addDatabase("QMYSQL");
-    this->db_.setHostName("10.0.0.11");
+    this->db_.setHostName("10.0.0.24");
     this->db_.setDatabaseName("my_project");
     this->db_.setUserName("depressa");
     this->db_.setPassword("d4m27244n");
@@ -357,10 +357,10 @@ const int MainWindow::GetId(const QString &_table, const QString &_column, const
     queryStr.append(_table);
     queryStr.append(" WHERE ");
     queryStr.append(_column);
-//    queryStr.append(" = \"");
+    //    queryStr.append(" = \"");
     queryStr.append(" = ");
     queryStr.append(_value);
-//    queryStr.append("\"");
+    //    queryStr.append("\"");
 
     QSqlQuery query = QSqlQuery(this->db_);
     if (!query.exec(queryStr))
@@ -381,15 +381,17 @@ const int MainWindow::GetId(const QString &_table, QStringList _slColumns, QStri
 {
     QString queryStr("SELECT id FROM ");
     queryStr.append(_table);
-    queryStr.append(" WHERE ");
+    queryStr.append(" WHERE (");
     for (int i = 0; i < _slColumns.size(); i++)
     {
         queryStr.append(_slColumns.at(i));
         queryStr.append(" = ");
         queryStr.append(_slValues.at(i));
         if (i != _slColumns.size() - 1)
-        {queryStr.append(" ");
-            queryStr.append(" AND ");}
+        {
+            queryStr.append(" ");
+            queryStr.append(" AND ");
+        } else queryStr.append(")");
     }
     qDebug() << queryStr;
     QSqlQuery query = QSqlQuery(this->db_);
@@ -400,11 +402,13 @@ const int MainWindow::GetId(const QString &_table, QStringList _slColumns, QStri
         qDebug() << query.lastError().driverText();
         return -1;
     }
-//    while (query.next())
-//    {
-        int qu = query.value(0).toInt();
-        return qu;
-//    }
+    QSqlRecord rec = query.record();
+    qDebug() << "Number of columns: " << rec.count();
+    int numberOfColumn = rec.indexOf("id");
+    int qu = 0;
+    while (query.next())
+        qu = query.value(numberOfColumn).toInt();
+    return qu;
 }
 
 const QString MainWindow::ExtractOnlyEnglishCharacters(const QString &_str)
@@ -414,10 +418,10 @@ const QString MainWindow::ExtractOnlyEnglishCharacters(const QString &_str)
     {
         QString resultEng = _str;
         int i = re.indexIn(resultEng);
-        qDebug() << re.pos(0);
-        resultEng = re.pos(0);
+
+        resultEng = re.cap(0);
         return resultEng;
-    } else return QString("");
+    } else return QString("-");
 }
 
 QString MainWindow::WrapQuotes(const QString _strForWrap)
@@ -459,8 +463,6 @@ void MainWindow::on_pb_Exec_clicked()
 void MainWindow::on_pb_Parse_clicked()
 {
     this->Parse();
-    //    this->LetParse();
-    //    this->Parse140ud();
 }
 
 void MainWindow::on_pb_imsNameInsert_clicked()
