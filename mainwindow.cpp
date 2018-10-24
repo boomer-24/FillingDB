@@ -6,15 +6,29 @@ MainWindow::MainWindow(QWidget *parent) :
     ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-    this->db_ = QSqlDatabase::addDatabase("QMYSQL");
-    this->db_.setHostName("10.0.0.24");
-    this->db_.setDatabaseName("my_project");
-    this->db_.setUserName("depressa");
-    this->db_.setPassword("d4m27244n");
-    if (!this->db_.open())
-    {
-        this->ui->lineEdit_DB->setText(this->db_.lastError().text());
-    } else this->ui->lineEdit_DB->setText("success");
+    this->ui->pushButton_connect->click();
+
+    this->mapForReplacing_.insert("E", "Е");
+    this->mapForReplacing_.insert("e", "е");
+    this->mapForReplacing_.insert("T", "Т");
+    this->mapForReplacing_.insert("Y", "У");
+    this->mapForReplacing_.insert("y", "у");
+    this->mapForReplacing_.insert("O", "О");
+    this->mapForReplacing_.insert("o", "о");
+    this->mapForReplacing_.insert("P", "Р");
+    this->mapForReplacing_.insert("p", "р");
+    this->mapForReplacing_.insert("A", "А");
+    this->mapForReplacing_.insert("a", "а");
+    this->mapForReplacing_.insert("H", "Н");
+    this->mapForReplacing_.insert("K", "К");
+    this->mapForReplacing_.insert("k", "к");
+    this->mapForReplacing_.insert("X", "Х");
+    this->mapForReplacing_.insert("x", "х");
+    this->mapForReplacing_.insert("C", "С");
+    this->mapForReplacing_.insert("c", "с");
+    this->mapForReplacing_.insert("B", "В");
+    this->mapForReplacing_.insert("M", "М");
+    this->mapForReplacing_.insert("m", "м");
 }
 
 MainWindow::~MainWindow()
@@ -137,7 +151,7 @@ const QString MainWindow::PrepareName(const QString &_name)
 {
     QString name(_name);
     int i = 0;
-    while (name.at(i) != "_")
+    while (name.at(i) != "_" && name.at(i) != ".")
     {
         i++;
     }
@@ -145,14 +159,49 @@ const QString MainWindow::PrepareName(const QString &_name)
     return name;
 }
 
+const QString MainWindow::LastPrepareName(const QString &_name)
+{
+    QRegExp reCommaTail(",\\s*(\\w)+$");
+    QString result(_name);
+    if (!_name.isEmpty())
+    {
+        if (result.contains(reCommaTail))
+        {
+            result.remove(reCommaTail);
+        }
+
+        QRegExp reEnglishChars("([A-Z]|[a-z])+");
+        if (result.contains(reEnglishChars))
+        {
+            result.remove(reEnglishChars);
+        }
+        int indexOfLastElement = result.size() - 1;
+        while (result.at(indexOfLastElement) == " " && indexOfLastElement > 0)
+        {
+            result.remove(indexOfLastElement, 1);
+            indexOfLastElement = result.size() - 1;
+        }
+    }
+    return result;
+}
+
+void MainWindow::ReplaceEngToRu(QString &_str)
+{
+    for (int i = 0; i < _str.size(); i++)
+    {
+        if (this->mapForReplacing_.contains(_str.at(i)))
+            _str.replace(i, 1, this->mapForReplacing_.value(_str.at(i)));
+    }
+}
+
 void MainWindow::Parse()
 {
     if (!this->slCSVFiles_.empty())
     {
-        for (auto path : this->slCSVFiles_)
+        for (auto fileName : this->slCSVFiles_)
         {
-            qDebug() << "HERE    " << path;
-            QString imsName = this->PrepareName(path);
+            QString  imsName = this->PrepareName(fileName);
+            this->ReplaceEngToRu(imsName);
             if (!isExistInDB("list_ims", "name", this->WrapQuotes(imsName)))
                 qDebug() << this->InsertInto("list_ims", "name", this->WrapQuotes(imsName));
             int idIms = this->GetId("list_ims", "name", this->WrapQuotes(imsName));
@@ -161,12 +210,12 @@ void MainWindow::Parse()
             int idParty = this->GetId("party_ims", "id_ims", QString::number(idIms));
 
             bool checkColumnNames(false);
-            QString p(this->dirPath_);
-            p += "/";
-            p += path;
-            QFile csvFile(p);
+            QString path(this->dirPath_);
+            path += "/";
+            path += fileName;
+            QFile csvFile(path);
             if (!csvFile.open(QIODevice::ReadOnly))
-                qDebug() << p << " not open";
+                qDebug() << path << " not open";
             else
             {
                 QTextStream stream(&csvFile);
@@ -176,6 +225,7 @@ void MainWindow::Parse()
                         columnSuit = 0, columnPower = 0, columnPower_2 = 0, columnOther = 0;
                 int rows = 0;
                 QString dateTime("2000-01-01 01:01:01");
+                int imsNumber(0);
                 while (!stream.atEnd())
                 {
                     QString line = stream.readLine();
@@ -190,7 +240,7 @@ void MainWindow::Parse()
                         {
                             QString tmp(slist.at(1));
                             tmp = tmp.toLower();
-                            if (tmp == "false") // МБ косяк когда строка пустая / DA POX
+                            if (tmp == "false")
                             {
                                 dateTime.clear();
                                 dateTime = "20";
@@ -200,6 +250,7 @@ void MainWindow::Parse()
                                 dateTime.append(dateSl.at(2)).append("-").append(dateSl.at(1)).
                                         append("-").append(dateSl.at(0)).append(" ");
                                 dateTime.append(time);
+                                imsNumber = this->GetPreviousImsNumber() + 1;
                                 break;
                             }
                             if (!checkColumnNames)
@@ -233,8 +284,29 @@ void MainWindow::Parse()
                                 if (colTestN.at(0).isDigit())
                                 {
                                     QString tmpName = slist.at(columnTestName);
+                                    if (tmpName.isEmpty())
+                                        break;
+                                    if (tmpName.contains("онтактирован"))
+                                        break;
+
+                                    if (tmpName.contains("c"))
+                                        tmpName.replace("c", "с");
+                                    if (tmpName.contains("A"))
+                                        tmpName.replace("A", "А");
+                                    if (tmpName.contains("B"))
+                                        tmpName.replace("B", "В");
+                                    if (tmpName.contains("Om"))
+                                        tmpName.replace("Om", "Ом");
+
                                     QString testName = this->RemoveDigit(tmpName);
                                     QString shortTestName = this->ExtractOnlyEnglishCharacters(testName);
+                                    QString testNameFinal = this->LastPrepareName(testName);
+                                    if (testNameFinal.isEmpty())
+                                        break;
+                                    this->ReplaceEngToRu(testNameFinal);
+                                    QString prefixUnit = this->ExtractPrefixAndUnitPair(testName);
+                                    this->ReplaceEngToRu(prefixUnit);
+                                    QPair<int, int> prefixUnitPair(this->GetIdsPrefixAndUnit(prefixUnit));
                                     QString pinName = slist.at(columnPinName);
                                     QString measValue = slist.at(columnMeasValue);
                                     QString lowLimit = slist.at(columnLowLimit);
@@ -247,47 +319,50 @@ void MainWindow::Parse()
                                     QString other = slist.at(columnOther);
 
                                     if (!isExistInDB("test_short_name", "short_name", this->WrapQuotes(shortTestName)))
-                                    {
-                                        bool result = InsertInto("test_short_name", "short_name", this->WrapQuotes(shortTestName));
-                                        qDebug() << result;
-                                    }
-                                    int idShortTestName = this->GetId("test_short_name", "short_name", this->WrapQuotes(shortTestName));
+                                        bool result = InsertInto("test_short_name", "short_name",
+                                                                 this->WrapQuotes(shortTestName));
 
-                                    if (!isExistInDB("test_name", "name", this->WrapQuotes(testName)))
+                                    int idShortTestName = this->GetId("test_short_name", "short_name",
+                                                                      this->WrapQuotes(shortTestName));
+
+                                    if (!isExistInDB("test_name", "name", this->WrapQuotes(testNameFinal)))
                                     {
                                         QString tn("");
+                                        tn.append(QString::number(prefixUnitPair.second));
+                                        tn.append(", ");
                                         tn.append(QString::number(idShortTestName));
                                         tn.append(", ");
-                                        tn.append(this->WrapQuotes(testName));
-                                        bool result = InsertInto("test_name", "id_short_name, name", tn);
+                                        tn.append(this->WrapQuotes(testNameFinal));
+                                        bool result = InsertInto("test_name", "id_category, id_short_name, name", tn);
                                         qDebug() << result;
                                     }
 
-                                    int idTestName = this->GetId("test_name", "name", this->WrapQuotes(testName));
-                                    int idSuit = this->GetId("measuring_status", "status", this->WrapQuotes(suit.toLower()));
+                                    //                                    int idTestName = this->GetId("test_name", "name", this->WrapQuotes(testNameFinal));
+                                    //                                    int idSuit = this->GetId("measuring_status", "status", this->WrapQuotes(suit.toLower()));
 
-                                    QStringList slCols{"id_test_name", "low_limit", "high_limit", "power"};
-                                    QStringList slVals{QString::number(idTestName), lowLimit, highLimit, power};
-                                    if (!power_2.isNull())
-                                    {
-                                        slCols.push_back("power_2");
-                                        slVals.push_back(power_2);
-                                    }
+                                    //                                    QStringList slCols{"id_test_name", "id_prefix", "low_limit", "high_limit", "power"};
+                                    //                                    QStringList slVals{QString::number(idTestName), QString::number(prefixUnitPair.first),
+                                    //                                                lowLimit, highLimit, power};
+                                    //                                    if (!power_2.isNull())
+                                    //                                    {
+                                    //                                        slCols.push_back("power_2");
+                                    //                                        slVals.push_back(power_2);
+                                    //                                    }
 
-                                    if (!isExistInDB("test_variant", slCols, slVals))
-                                    {
-                                        qDebug() << this->InsertInto("test_variant", slCols, slVals);
-                                    }
-                                    int idTestVariant = this->GetId("test_variant", slCols, slVals);
+                                    //                                    if (!isExistInDB("test_variant", slCols, slVals))
+                                    //                                    {
+                                    //                                        qDebug() << this->InsertInto("test_variant", slCols, slVals);
+                                    //                                    }
+                                    //                                    int idTestVariant = this->GetId("test_variant", slCols, slVals);
 
-                                    QStringList slColsForMeasuring{"date", "id_session", "id_party", "id_test_variant",
-                                                                   "pin_name", "meas", "id_measuring_status"};
-                                    QStringList slValsForMeasuring {this->WrapQuotes(dateTime), QString::number(1),
-                                                QString::number(idParty), QString::number(idTestVariant),
-                                                this->WrapQuotes(pinName), measValue, QString::number(idSuit)};
-                                    qDebug() << this->InsertInto("measuring", slColsForMeasuring, slValsForMeasuring);
+                                    //                                    QStringList slColsForMeasuring{"date", "id_session", "id_party", "number", "id_test_variant",
+                                    //                                                                   "pin_name", "meas", "id_measuring_status"};
+                                    //                                    QStringList slValsForMeasuring {this->WrapQuotes(dateTime), QString::number(1),
+                                    //                                                QString::number(idParty), QString::number(imsNumber), QString::number(idTestVariant),
+                                    //                                                this->WrapQuotes(pinName), measValue, QString::number(idSuit)};
+                                    //                                    qDebug() << this->InsertInto("measuring", slColsForMeasuring, slValsForMeasuring);
                                     break;
-                                }
+                                } else break;
                             }
                         }
                     }
@@ -307,7 +382,6 @@ bool MainWindow::InsertInto(const QString &_table, const QString &_column, const
     queryStr.append(_column);
     queryStr.append(")");
     queryStr.append(" values(");
-    //    queryStr.append(" value(");
     queryStr.append(_value);
     queryStr.append(")");
     if (!query.exec(queryStr))
@@ -357,10 +431,8 @@ const int MainWindow::GetId(const QString &_table, const QString &_column, const
     queryStr.append(_table);
     queryStr.append(" WHERE ");
     queryStr.append(_column);
-    //    queryStr.append(" = \"");
     queryStr.append(" = ");
     queryStr.append(_value);
-    //    queryStr.append("\"");
 
     QSqlQuery query = QSqlQuery(this->db_);
     if (!query.exec(queryStr))
@@ -411,6 +483,122 @@ const int MainWindow::GetId(const QString &_table, QStringList _slColumns, QStri
     return qu;
 }
 
+const QPair<int, int> MainWindow::GetIdsPrefixAndUnit(const QString &_prefixAndUnit)
+{
+    if (!_prefixAndUnit.isEmpty())
+    {
+        QVector<QString> vUnits(this->GetEverySomething("test_category", "isu_name"));
+        int index(-1);
+        for (QString& unit : vUnits)
+        {
+            if (_prefixAndUnit.contains(unit))
+            {
+                index = _prefixAndUnit.indexOf(unit);
+                break;
+            }
+        }
+        if (index != -1)
+        {
+            QString prefix;
+            QString unit;
+            for (int i = 0; i < _prefixAndUnit.size(); i++)
+            {
+                if (i < index)
+                    prefix.push_back(_prefixAndUnit.at(i));
+                else
+                    unit.push_back(_prefixAndUnit.at(i));
+            }
+            int idPrefix = this->GetId("prefix", "name", this->WrapQuotes(prefix));
+            int idUnit = this->GetId("test_category", "isu_name", this->WrapQuotes(unit));
+
+            return QPair<int, int>(idPrefix, idUnit);
+        } else return QPair<int, int>(-1, -1);
+    } else return QPair<int, int>(-1, -1);
+}
+
+const int MainWindow::GetPreviousImsNumber()
+{
+    QString queryStr("SELECT number FROM measuring ORDER BY number DESC LIMIT 1");
+    QSqlQuery query = QSqlQuery(this->db_);
+
+    if (!query.exec(queryStr))
+    {
+        qDebug() << "NE DAL MAX Number";
+        qDebug() << query.lastError().databaseText();
+        qDebug() << query.lastError().driverText();
+        return -1;
+    }
+    QSqlRecord rec = query.record();
+    qDebug() << "Number of columns: " << rec.count();
+    //    int numberOfColumn = rec.indexOf(_smth);
+    //    QString qu("0");
+    int qu(-1);
+    while (query.next())
+        qu = query.value(0).toInt();
+    return qu;
+}
+
+const QVector<QString> MainWindow::GetEverySomething(const QString &_table, const QString &_smthColumn) const
+{
+    QString queryStr("SELECT ");
+    queryStr.append(_smthColumn).append(" FROM ");
+    queryStr.append(_table);
+    //    queryStr.append(")");
+    qDebug() << queryStr;
+    QVector<QString> vResultValues;
+    QSqlQuery query = QSqlQuery(this->db_);
+    if (!query.exec(queryStr))
+    {
+        qDebug() << "NE DAL QVector<SMTH>";
+        qDebug() << query.lastError().databaseText();
+        qDebug() << query.lastError().driverText();
+        return vResultValues;
+    }
+    QSqlRecord rec = query.record();
+    qDebug() << "Number of columns: " << rec.count();
+    int numberOfColumn = rec.indexOf(_smthColumn);
+    QString qu("0");
+    while (query.next())
+        vResultValues.push_back(query.value(numberOfColumn).toString());
+    return vResultValues;
+}
+
+const QString MainWindow::GetSomething(const QString &_table, const QString &_smth,
+                                       const QStringList& _slColumns, const QStringList& _slValues)
+{
+    QString queryStr("SELECT ");
+    queryStr.append(_smth).append(" FROM ");
+    queryStr.append(_table);
+    queryStr.append(" WHERE (");
+    for (int i = 0; i < _slColumns.size(); i++)
+    {
+        queryStr.append(_slColumns.at(i));
+        queryStr.append(" = ");
+        queryStr.append(_slValues.at(i));
+        if (i != _slColumns.size() - 1)
+        {
+            queryStr.append(" ");
+            queryStr.append(" AND ");
+        } else queryStr.append(")");
+    }
+    qDebug() << queryStr;
+    QSqlQuery query = QSqlQuery(this->db_);
+    if (!query.exec(queryStr))
+    {
+        qDebug() << "NE DAL SMTH";
+        qDebug() << query.lastError().databaseText();
+        qDebug() << query.lastError().driverText();
+        return QString("-1");
+    }
+    QSqlRecord rec = query.record();
+    qDebug() << "Number of columns: " << rec.count();
+    int numberOfColumn = rec.indexOf(_smth);
+    QString qu("0");
+    while (query.next())
+        qu = query.value(numberOfColumn).toString();
+    return qu;
+}
+
 const QString MainWindow::ExtractOnlyEnglishCharacters(const QString &_str)
 {
     QRegExp re("([A-Z]|[a-z])+");
@@ -418,10 +606,19 @@ const QString MainWindow::ExtractOnlyEnglishCharacters(const QString &_str)
     {
         QString resultEng = _str;
         int i = re.indexIn(resultEng);
-
         resultEng = re.cap(0);
         return resultEng;
     } else return QString("-");
+}
+
+const QString MainWindow::ExtractPrefixAndUnitPair(const QString &_testName)
+{
+    if (!_testName.isEmpty() && _testName.contains(","))
+    {
+        QString last = _testName.split(",").last();
+        last.remove(" ");
+        return last;
+    } else return QString("");
 }
 
 QString MainWindow::WrapQuotes(const QString _strForWrap)
@@ -442,22 +639,23 @@ void MainWindow::on_pb_SelectDir_clicked()
 
 void MainWindow::on_pb_Exec_clicked()
 {
-    QString Squery = this->ui->lineEdit_Exec->text();
-    QSqlQuery query = QSqlQuery(this->db_);
-    if (!query.exec(Squery))
-    {
-        qDebug() << query.lastError().databaseText();
-        qDebug() << query.lastError().driverText();
-        return;
-    }
-    while (query.next())
-    {
-        //        int qu = query.value(0).toInt();
-        QString qu = query.value(1).toString();
-        qDebug() << query.record();
-        qDebug() << "\n _____qu: " << qu;
-    }
-    qDebug() << Squery;
+    qDebug() << this->GetPreviousImsNumber();
+    //    QString Squery = this->ui->lineEdit_Exec->text();
+    //    QSqlQuery query = QSqlQuery(this->db_);
+    //    if (!query.exec(Squery))
+    //    {
+    //        qDebug() << query.lastError().databaseText();
+    //        qDebug() << query.lastError().driverText();
+    //        return;
+    //    }
+    //    while (query.next())
+    //    {
+    //        //        int qu = query.value(0).toInt();
+    //        QString qu = query.value(1).toString();
+    //        qDebug() << query.record();
+    //        qDebug() << "\n _____qu: " << qu;
+    //    }
+    //    qDebug() << Squery;
 }
 
 void MainWindow::on_pb_Parse_clicked()
@@ -486,4 +684,18 @@ void MainWindow::on_pb_imsNameInsert_clicked()
             }
         }
     }
+}
+
+void MainWindow::on_pushButton_connect_clicked()
+{
+    this->db_ = QSqlDatabase::addDatabase("QMYSQL");
+    //    this->db_.setHostName(this->ui->lineEdit_ipPath->text());
+    this->db_.setHostName("10.0.0.11");
+    this->db_.setDatabaseName("my_project");
+    this->db_.setUserName("depressa");
+    this->db_.setPassword("d4m27244n");
+    if (!this->db_.open())
+    {
+        this->ui->lineEdit_DB->setText(this->db_.lastError().text());
+    } else this->ui->lineEdit_DB->setText("success");
 }

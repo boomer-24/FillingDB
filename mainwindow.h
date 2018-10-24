@@ -29,13 +29,20 @@ public:
     bool isExistInDB(const QString &_table, QStringList _slColumns, QStringList _slValues);
 
     const QString PrepareName(const QString& _name);
+    const QString LastPrepareName(const QString& _name);
+    void ReplaceEngToRu(QString& _str);
     void Parse();
 
     bool InsertInto(const QString &_table, const QString &_column, const QString &_value);
     bool InsertInto(const QString &_table, QStringList _slColumns, QStringList _slValues);
     const int GetId(const QString &_table, const QString &_column, const QString &_value);
     const int GetId(const QString &_table, QStringList _slColumns, QStringList _slValues);
+    const QPair<int, int> GetIdsPrefixAndUnit(const QString &_prefixAndUnit);
+    const int GetPreviousImsNumber();
+    const QVector<QString> GetEverySomething(const QString &_table, const QString &_smthColumn) const;
+    const QString GetSomething(const QString &_table, const QString &_smth, const QStringList &_slColumns, const QStringList &_slValues);
     const QString ExtractOnlyEnglishCharacters(const QString& _str);
+    const QString ExtractPrefixAndUnitPair(const QString& _testName);
     QString WrapQuotes(const QString _strForWrap);
 
 private slots:
@@ -43,6 +50,7 @@ private slots:
     void on_pb_Exec_clicked();
     void on_pb_Parse_clicked();
     void on_pb_imsNameInsert_clicked();
+    void on_pushButton_connect_clicked();    
 
 private:
     Ui::MainWindow *ui;
@@ -50,6 +58,7 @@ private:
     QStringList slCSVFiles_;
     QSqlDatabase db_;
     int colomnNumber_;
+    QMap<QString, QString> mapForReplacing_;
 };
 
 #endif // MAINWINDOW_H
